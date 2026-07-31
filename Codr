@@ -1,27 +1,46 @@
-import pickle
-import mlflow.sklearn
+import joblib
 
-models = {
-    "investment": "dbfs:/hvc_segmentation/hvc_kmeans_investment_need.pkl",
-    "service": "dbfs:/hvc_segmentation/hvc_kmeans_service_need.pkl",
-    "opportunity": "dbfs:/hvc_segmentation/hvc_kmeans_opportunity_need.pkl"
+scaler = model.named_steps["scaler"]
+kmeans = model.named_steps["kmeans"]
+
+export = {
+    "scaler_mean": scaler.mean_,
+    "scaler_scale": scaler.scale_,
+    "kmeans_cluster_centers": kmeans.cluster_centers_,
+    "kmeans_n_clusters": kmeans.n_clusters,
+    "kmeans_inertia": kmeans.inertia_,
+    "kmeans_n_iter": kmeans.n_iter_
 }
 
-for model_name, model_path in models.items():
+joblib.dump(
+    export,
+    "/dbfs/hvc_segmentation/hvc_kmeans_pipeline_params.pkl"
+)
+import joblib
+import numpy as np
 
-    # Load pickle model
-    local_path = model_path.replace("dbfs:", "/dbfs")
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 
-    with open(local_path, "rb") as f:
-        model = pickle.load(f)
+data = joblib.load(
+    "/dbfs/hvc_segmentation/hvc_kmeans_pipeline_params.pkl"
+)
 
-    # New location - does not overwrite original
-    new_path = f"dbfs:/hvc_segmentation/mlflow_{model_name}_v2"
+scaler = StandardScaler()
+scaler.mean_ = np.array(data["scaler_mean"])
+scaler.scale_ = np.array(data["scaler_scale"])
+scaler.n_features_in_ = len(data["scaler_mean"])
 
-    # Save MLflow model
-    mlflow.sklearn.save_model(
-        sk_model=model,
-        path=new_path.replace("dbfs:", "/dbfs")
-    )
+kmeans = KMeans(
+    n_clusters=data["kmeans_n_clusters"]
+)
 
-    print(f"Saved {model_name} to {new_path}")
+kmeans.cluster_centers_ = np.array(data["kmeans_cluster_centers"])
+kmeans.inertia_ = data["kmeans_inertia"]
+kmeans.n_iter_ = data["kmeans_n_iter"]
+
+pipeline = Pipeline([
+    ("scaler", scaler),
+    ("kmeans", kmeans)
+])
