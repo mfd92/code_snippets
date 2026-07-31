@@ -1,0 +1,27 @@
+import pickle
+import mlflow.sklearn
+
+models = {
+    "investment": "dbfs:/hvc_segmentation/hvc_kmeans_investment_need.pkl",
+    "service": "dbfs:/hvc_segmentation/hvc_kmeans_service_need.pkl",
+    "opportunity": "dbfs:/hvc_segmentation/hvc_kmeans_opportunity_need.pkl"
+}
+
+for model_name, model_path in models.items():
+
+    # Load pickle model
+    local_path = model_path.replace("dbfs:", "/dbfs")
+
+    with open(local_path, "rb") as f:
+        model = pickle.load(f)
+
+    # New location - does not overwrite original
+    new_path = f"dbfs:/hvc_segmentation/mlflow_{model_name}_v2"
+
+    # Save MLflow model
+    mlflow.sklearn.save_model(
+        sk_model=model,
+        path=new_path.replace("dbfs:", "/dbfs")
+    )
+
+    print(f"Saved {model_name} to {new_path}")
