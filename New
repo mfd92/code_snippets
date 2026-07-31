@@ -1,0 +1,75 @@
+import mlflow.sklearn
+import joblib
+
+# Load MLflow sklearn pipeline
+model = mlflow.sklearn.load_model(
+    "dbfs:/hvc_segmentation/mlflow_need"
+)
+
+# Extract steps
+log_step = model.named_steps["log"]
+kmeans_step = model.named_steps["kmeans"]
+
+# Export pipeline components
+export_data = {
+    "log_class": log_step.__class__,
+    "log_params": log_step.__dict__,
+
+    "kmeans_params": {
+        "n_clusters": kmeans_step.n_clusters,
+        "cluster_centers_": kmeans_step.cluster_centers_,
+        "labels_": kmeans_step.labels_,
+        "inertia_": kmeans_step.inertia_,
+        "n_iter_": kmeans_step.n_iter_,
+        "n_features_in_": kmeans_step.n_features_in_
+    }
+}
+
+# Save export file
+joblib.dump(
+    export_data,
+    "/dbfs/hvc_segmentation/hvc_kmeans_pipeline_export.pkl"
+)
+
+print("Export completed")
+
+import joblib
+import numpy as np
+from sklearn.pipeline import Pipeline
+from sklearn.cluster import KMeans
+
+# Load export
+data = joblib.load(
+    "/dbfs/hvc_segmentation/hvc_kmeans_pipeline_export.pkl"
+)
+
+# Recreate log step
+log_step = data["log_class"]()
+
+for key, value in data["log_params"].items():
+    setattr(log_step, key, value)
+
+# Recreate KMeans
+kmeans_data = data["kmeans_params"]
+
+kmeans_step = KMeans(
+    n_clusters=kmeans_data["n_clusters"]
+)
+
+kmeans_step.cluster_centers_ = np.array(
+    kmeans_data["cluster_centers_"]
+)
+kmeans_step.labels_ = kmeans_data["labels_"]
+kmeans_step.inertia_ = kmeans_data["inertia_"]
+kmeans_step.n_iter_ = kmeans_data["n_iter_"]
+kmeans_step.n_features_in_ = kmeans_data["n_features_in_"]
+
+# Final pipeline
+new_pipeline = Pipeline([
+    ("log", log_step),
+    ("kmeans", kmeans_step)
+])
+
+print(new_pipeline)
+
+
